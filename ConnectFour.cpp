@@ -9,10 +9,17 @@
 #include <opencv2/highgui.hpp>
 #include "GetBoard.h"
 #include <string>
+#include "connect4/Solver.hpp"
+#include "connect4/Position.hpp"
+#include "connect4/TranspositionTable.hpp"
+#include "connect4/OpeningBook.hpp"
+
+
+
 
 cv::VideoCapture cap;
 
-#define NUM_THREADS (2)
+#define NUM_THREADS (4)
 #define NUM_CPUS (4)
 
 #define moveWaitThreshold 0.5
@@ -45,6 +52,7 @@ pthread_attr_t main_attr;
 pid_t mainpid;
 
 pthread_mutex_t boardLock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t moveLock = PTHREAD_MUTEX_INITIALIZER;
 
 
 std::array<std::array<char, 7>, 6> capturedBoard;
@@ -54,6 +62,9 @@ ATLAS::CircularBuffer<boardBufferSize, std::array<std::array<char, 7>, 6>> board
         ATLAS::CircularBuffer<boardBufferSize, std::array<std::array<char, 7>, 6>>();
 
 bool thread1SetupDone = false;
+bool thread2SetupDone = false;
+bool thread3SetupDone = false;
+bool thread4SetupDone = false;
 
 std::string gameString = "";
 
@@ -78,6 +89,7 @@ void *thread1(void *args) {
 
 void *thread2(void *args) {
     std::cout << "Move thread running" << std::endl;
+    thread2SetupDone = true;
     while (true) {
         if (not isBoardEqual(currentBoard, capturedBoard)) {
             if (pthread_mutex_trylock(&boardLock) == 0) {
@@ -93,7 +105,10 @@ void *thread2(void *args) {
                     std::cout << tDelta << std::endl;
                     if (tDelta > 1000 * moveWaitThreshold or true) {
                         std::cout << "Move Made! " << moveLoc << std::endl;
-                        gameString = gameString + std::to_string(moveLoc);
+                        if (pthread_mutex_trylock(&moveLock) == 0) {
+                            gameString = gameString + std::to_string(moveLoc);
+                            pthread_mutex_unlock(&moveLock);
+                        }
                         currentBoard = capturedBoard;
                         tLastMove = tMove;
                     }
@@ -107,6 +122,58 @@ void *thread2(void *args) {
                 pthread_mutex_unlock(&boardLock);
             }
 
+        }
+    }
+}
+
+void *thread3(void *args) {
+    std::cout << "Strong solver thread running" << std::endl;
+    GameSolver::Connect4::Solver solver;
+
+    bool weak = false;
+    std::string opening_book = "connect4/7x6.book";
+    solver.loadBook(opening_book);
+    GameSolver::Connect4::Position P;
+    std::string previousGameString = "";
+    thread3SetupDone = true;
+
+    while(true) {
+        if(not (previousGameString == gameString)) {
+            if (pthread_mutex_trylock(&moveLock) == 0) {
+                for (int column = 1; column <= 7; column++) {
+                    std::string copyGameString = gameString;
+                    copyGameString.std::string::append(std::to_string(column));
+                    if(P.play(copyGameString) != copyGameString.size()) {
+                        std::cerr << "Next Move: " << copyGameString << ": Invalid move " << (P.nbMoves() + 1) << " \"" << gameString << "\"" << std::endl;
+                    } else {
+                        solver.reset();
+                        int score = solver.solve(P, weak);
+                        std::cout << "Next Move (" << column << "): " << copyGameString << " score: " << score << " nodes iterated: " << solver.getNodeCount();
+                    }
+                    std::cout << std::endl;
+                }
+                previousGameString = gameString;
+                pthread_mutex_unlock(&moveLock);
+            }
+        }
+    }
+}
+
+void *thread4(void *args) {
+    std::cout << "Weak solver thread running" << std::endl;
+    GameSolver::Connect4::Position P;
+    std::string previousGameString = "";
+    thread4SetupDone = true;
+
+    if (not (previousGameString == gameString)) {
+        if (pthread_mutex_trylock(&moveLock) == 0){
+            P.play(gameString);
+            if (P.canWinNext()) {
+                std::cout << "can win with next move" << std::endl;
+            } else {
+                std::cout << "can't win with next move" << std::endl;
+            }
+            pthread_mutex_unlock(&moveLock);
         }
     }
 }
@@ -231,8 +298,69 @@ int main(int argc, char *argv[]) {
                    thread2,              // thread function entry point
                    (void *) &(threadParams[i]) // parameters to pass in
     );
+    while (!thread2SetupDone) {
+
+    }
     //////
     //////
+    i=2;
+    CPU_ZERO(&threadcpu);
+
+    coreid = i % numberOfProcessors;
+    printf("Setting thread %d to core %d\n", i, coreid);
+
+    CPU_SET(coreid, &threadcpu);
+
+    rc = pthread_attr_init(&rt_sched_attr[i]);
+    rc = pthread_attr_setinheritsched(&rt_sched_attr[i], PTHREAD_EXPLICIT_SCHED);
+    rc = pthread_attr_setschedpolicy(&rt_sched_attr[i], MY_SCHEDULER);
+    rc = pthread_attr_setaffinity_np(&rt_sched_attr[i], sizeof(cpu_set_t), &threadcpu);
+
+    rt_param[i].sched_priority = rt_max_prio - i - 1;
+    pthread_attr_setschedparam(&rt_sched_attr[i], &rt_param[i]);
+
+    threadParams[i].threadIdx = i;
+
+    pthread_create(&threads[i],               // pointer to thread descriptor
+                   &rt_sched_attr[i],         // use AFFINITY AND SCHEDULER attributes
+                   thread3,              // thread function entry point
+                   (void *) &(threadParams[i]) // parameters to pass in
+    );
+    while (!thread3SetupDone) {
+
+    }
+    //////
+    //////
+
+    i=3;
+    CPU_ZERO(&threadcpu);
+
+    coreid = i % numberOfProcessors;
+    printf("Setting thread %d to core %d\n", i, coreid);
+
+    CPU_SET(coreid, &threadcpu);
+
+    rc = pthread_attr_init(&rt_sched_attr[i]);
+    rc = pthread_attr_setinheritsched(&rt_sched_attr[i], PTHREAD_EXPLICIT_SCHED);
+    rc = pthread_attr_setschedpolicy(&rt_sched_attr[i], MY_SCHEDULER);
+    rc = pthread_attr_setaffinity_np(&rt_sched_attr[i], sizeof(cpu_set_t), &threadcpu);
+
+    rt_param[i].sched_priority = rt_max_prio - i - 1;
+    pthread_attr_setschedparam(&rt_sched_attr[i], &rt_param[i]);
+
+    threadParams[i].threadIdx = i;
+
+    pthread_create(&threads[i],               // pointer to thread descriptor
+                   &rt_sched_attr[i],         // use AFFINITY AND SCHEDULER attributes
+                   thread4,              // thread function entry point
+                   (void *) &(threadParams[i]) // parameters to pass in
+    );
+    while (!thread4SetupDone) {
+
+    }
+    //////
+    //////
+
 
     for (i = 0; i < NUM_THREADS; i++)
         pthread_join(threads[i], NULL);
