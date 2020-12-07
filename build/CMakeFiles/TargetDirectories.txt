@@ -1,0 +1,3 @@
+/home/adam/Documents/real-time-project/Connect2plus2/build/CMakeFiles/rebuild_cache.dir
+/home/adam/Documents/real-time-project/Connect2plus2/build/CMakeFiles/RealtimeProject.dir
+/home/adam/Documents/real-time-project/Connect2plus2/build/CMakeFiles/edit_cache.dir
