@@ -113,10 +113,13 @@ cv::Mat lastAvg;
 bool firstIter = true;
 int bufferIndex = 0;
 
+
+
 std::array<std::array<char, 7>, 6> getBoard(cv::VideoCapture cap) {
     cv::Mat src;
     cap >> src;
     if (firstIter) {
+        namedWindow("Display window", WINDOW_AUTOSIZE);
         for (int i = 0; i < bufferSize; ++i) {
             buffer.push_back(src);
         }
@@ -182,6 +185,8 @@ std::array<std::array<char, 7>, 6> getBoard(cv::VideoCapture cap) {
         }
         board.at(boardY).at(boardX) = center;
     }
+
+    imshow("Display Window", src);
 
     std::array<std::array<char, 7>, 6> currentBoard = getBoardArray(board, src);
 

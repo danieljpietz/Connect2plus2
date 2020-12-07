@@ -15,8 +15,6 @@
 #include "connect4/OpeningBook.hpp"
 
 
-
-
 cv::VideoCapture cap;
 
 #define NUM_THREADS (4)
@@ -68,6 +66,9 @@ bool thread4SetupDone = false;
 
 std::string gameString = "";
 
+int strongAnswer = 0;
+int weakAnswer = 0;
+
 void *thread1(void *args) {
     std::cout << "Image thread running" << std::endl;
 
@@ -87,7 +88,7 @@ void *thread1(void *args) {
     }
 }
 
-void *thread2(void *args) {
+[[noreturn]] void *thread2(void *args) {
     std::cout << "Move thread running" << std::endl;
     thread2SetupDone = true;
     while (true) {
@@ -105,9 +106,18 @@ void *thread2(void *args) {
                     std::cout << tDelta << std::endl;
                     if (tDelta > 1000 * moveWaitThreshold) {
                         std::cout << "Move Made! " << moveLoc << std::endl;
-                        if (pthread_mutex_trylock(&moveLock) == 0) {
-                            gameString = gameString + std::to_string(moveLoc);
-                            pthread_mutex_unlock(&moveLock);
+                        strongAnswer = 0;
+                        weakAnswer = 0;
+                        gameString = gameString + std::to_string(moveLoc);
+
+                        while (strongAnswer == 0 and std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::high_resolution_clock::now() - tMove).count() < 500) {
+                        }
+                        if (strongAnswer != 0) {
+                            std::cout << "Next move: " << std::to_string(strongAnswer) << std::endl;
+                        }
+                        else {
+                            std::cout << "Next move: " << std::to_string(weakAnswer) << std::endl;
                         }
                         currentBoard = capturedBoard;
                         tLastMove = tMove;
@@ -128,6 +138,7 @@ void *thread2(void *args) {
 
 void *thread3(void *args) {
     std::cout << "Strong solver thread running" << std::endl;
+
     GameSolver::Connect4::Solver solver;
 
     bool weak = false;
@@ -137,45 +148,58 @@ void *thread3(void *args) {
     std::string previousGameString = "";
     thread3SetupDone = true;
 
-    while(true) {
-        if(not (previousGameString == gameString)) {
-            if (pthread_mutex_trylock(&moveLock) == 0) {
-                for (int column = 1; column <= 7; column++) {
-                    std::string copyGameString = gameString;
-                    copyGameString.std::string::append(std::to_string(column));
-                    if(P.play(copyGameString) != copyGameString.size()) {
-                        std::cerr << "Next Move: " << copyGameString << ": Invalid move " << (P.nbMoves() + 1) << " \"" << gameString << "\"" << std::endl;
-                    } else {
-                        solver.reset();
-                        int score = solver.solve(P, weak);
-                        std::cout << "Next Move (" << column << "): " << copyGameString << " score: " << score << " nodes iterated: " << solver.getNodeCount();
-                    }
-                    std::cout << std::endl;
+    while (true) {
+        if (not(previousGameString == gameString)) {
+            //if (pthread_mutex_trylock(&moveLock) == 0) {
+            for (int column = 1; column <= 7; column++) {
+                std::string copyGameString = gameString;
+                copyGameString.std::string::append(std::to_string(column));
+                if (P.play(copyGameString) != copyGameString.size()) {
+                    std::cerr << "Next Move: " << copyGameString << ": Invalid move " << (P.nbMoves() + 1) << " \""
+                              << gameString << "\"" << std::endl;
+                } else {
+                    solver.reset();
+                    int score = solver.solve(P, weak);
+                    strongAnswer = column;
+                    //std::cout << "Next Move (" << column << "): " << copyGameString << " score: " << score
+                              //<< " nodes iterated: " << solver.getNodeCount();
                 }
-                previousGameString = gameString;
-                pthread_mutex_unlock(&moveLock);
+                std::cout << std::endl;
             }
+            previousGameString = gameString;
+            //pthread_mutex_unlock(&moveLock);
+            //}
         }
     }
+
 }
 
 void *thread4(void *args) {
     std::cout << "Weak solver thread running" << std::endl;
+
     GameSolver::Connect4::Position P;
     std::string previousGameString = "";
     thread4SetupDone = true;
 
-    if (not (previousGameString == gameString)) {
-        if (pthread_mutex_trylock(&moveLock) == 0){
-            P.play(gameString);
+    if (not(previousGameString == gameString)) {
+        //if (pthread_mutex_trylock(&moveLock) == 0){
+        assert(0);
+        for (int column = 1; column <= 7; column++) {
+            std::cout << column << std::endl;
+            std::string copyGameString = gameString;
+            copyGameString.std::string::append(std::to_string(column));
+            P.play(copyGameString);
             if (P.canWinNext()) {
-                std::cout << "can win with next move" << std::endl;
+                continue;
             } else {
-                std::cout << "can't win with next move" << std::endl;
+                std::cout << "FFFF" << std::endl;
+                weakAnswer = column;
             }
-            pthread_mutex_unlock(&moveLock);
         }
+        // pthread_mutex_unlock(&moveLock);
+        //}
     }
+
 }
 
 void print_scheduler(void) {
@@ -303,7 +327,7 @@ int main(int argc, char *argv[]) {
     }
     //////
     //////
-    i=2;
+    i = 2;
     CPU_ZERO(&threadcpu);
 
     coreid = i % numberOfProcessors;
@@ -332,7 +356,7 @@ int main(int argc, char *argv[]) {
     //////
     //////
 
-    i=3;
+    i = 3;
     CPU_ZERO(&threadcpu);
 
     coreid = i % numberOfProcessors;
