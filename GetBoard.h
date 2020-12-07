@@ -8,7 +8,7 @@
 #include <opencv2/opencv.hpp>
 #include "CircularBuffer.h"
 
-#define boardBufferSize 2
+#define boardBufferSize 10
 
 bool isBufferEqual(ATLAS::CircularBuffer<boardBufferSize, std::array<std::array<char, 7>, 6>> buffer);
 

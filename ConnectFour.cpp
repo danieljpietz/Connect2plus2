@@ -69,7 +69,9 @@ std::string gameString = "";
 int strongAnswer = 0;
 int weakAnswer = 0;
 
-void *thread1(void *args) {
+int tick = 0;
+
+[[noreturn]] void *thread1(void *args) {
     std::cout << "Image thread running" << std::endl;
 
     capturedBoard = getBoard(cap);
@@ -78,20 +80,25 @@ void *thread1(void *args) {
         boardBuffer.insert(capturedBoard);
     }
     thread1SetupDone = true;
+
     while (true) {
+
+
         if (pthread_mutex_trylock(&boardLock) == 0) {
             capturedBoard = getBoard(cap);
             pthread_mutex_unlock(&boardLock);
         }
 
-
     }
 }
+
+int moveCount = 0;
 
 [[noreturn]] void *thread2(void *args) {
     std::cout << "Move thread running" << std::endl;
     thread2SetupDone = true;
     while (true) {
+        auto T1 = std::chrono::high_resolution_clock::now();
         if (not isBoardEqual(currentBoard, capturedBoard)) {
             if (pthread_mutex_trylock(&boardLock) == 0) {
                 boardBuffer.insert(capturedBoard);
@@ -100,43 +107,46 @@ void *thread1(void *args) {
                     if (moveLoc == 0) {
                         continue;
                     }
-
                     auto tMove = std::chrono::high_resolution_clock::now();
                     auto tDelta = std::chrono::duration_cast<std::chrono::milliseconds>(tMove - tLastMove).count();
-                    std::cout << tDelta << std::endl;
-                    if (tDelta > 1000 * moveWaitThreshold) {
+                    if (tDelta > (5000 * moveWaitThreshold)) {
                         std::cout << "Move Made! " << moveLoc << std::endl;
                         strongAnswer = 0;
                         weakAnswer = 0;
                         gameString = gameString + std::to_string(moveLoc);
-
+                        std::cout << "STR " << gameString << std::endl;
                         while (strongAnswer == 0 and std::chrono::duration_cast<std::chrono::milliseconds>(
                                 std::chrono::high_resolution_clock::now() - tMove).count() < 500) {
                         }
                         if (strongAnswer != 0) {
-                            std::cout << "Next move: " << std::to_string(strongAnswer) << std::endl;
+                            std::cout << "Next move Strong: " << std::to_string(strongAnswer) << std::endl;
                         }
                         else {
-                            std::cout << "Next move: " << std::to_string(weakAnswer) << std::endl;
+                            std::cout << "Next move Weak: " << std::to_string(weakAnswer) << std::endl;
                         }
                         currentBoard = capturedBoard;
                         tLastMove = tMove;
+                        std::cout << "CURRENT\n";
+                        printBoard(currentBoard);
+                        std::cout << "Captured\n";
+                        printBoard(capturedBoard);
                     }
-
                     //std::cout << "CURRENT\n";
                     //printBoard(currentBoard);
                     //std::cout << "Captured\n";
                     //printBoard(capturedBoard);
+                    auto T2 = std::chrono::high_resolution_clock::now();
+                    //std::cout << "TIME: " << std::chrono::duration_cast<std::chrono::nanoseconds>(T2 - T1).count() << std::endl;
 
                 }
                 pthread_mutex_unlock(&boardLock);
             }
-
         }
+
     }
 }
 
-void *thread3(void *args) {
+[[noreturn]] void *thread3(void *args) {
     std::cout << "Strong solver thread running" << std::endl;
 
     GameSolver::Connect4::Solver solver;
@@ -154,9 +164,10 @@ void *thread3(void *args) {
             for (int column = 1; column <= 7; column++) {
                 std::string copyGameString = gameString;
                 copyGameString.std::string::append(std::to_string(column));
+                //std::cout << "T1 " << P.play(copyGameString) << " T2 " << copyGameString.size() << std::endl;
                 if (P.play(copyGameString) != copyGameString.size()) {
-                    std::cerr << "Next Move: " << copyGameString << ": Invalid move " << (P.nbMoves() + 1) << " \""
-                              << gameString << "\"" << std::endl;
+                    //std::cerr << "Next Move: " << copyGameString << ": Invalid move " << (P.nbMoves() + 1) << " \""
+                              //<< gameString << "\"" << std::endl;
                 } else {
                     solver.reset();
                     int score = solver.solve(P, weak);
@@ -174,30 +185,44 @@ void *thread3(void *args) {
 
 }
 
-void *thread4(void *args) {
+[[noreturn]] void *thread4(void *args) {
     std::cout << "Weak solver thread running" << std::endl;
 
     GameSolver::Connect4::Position P;
     std::string previousGameString = "";
+    std::srand(std::time(nullptr));
     thread4SetupDone = true;
 
-    if (not(previousGameString == gameString)) {
-        //if (pthread_mutex_trylock(&moveLock) == 0){
-        assert(0);
-        for (int column = 1; column <= 7; column++) {
-            std::cout << column << std::endl;
-            std::string copyGameString = gameString;
-            copyGameString.std::string::append(std::to_string(column));
-            P.play(copyGameString);
-            if (P.canWinNext()) {
-                continue;
-            } else {
-                std::cout << "FFFF" << std::endl;
-                weakAnswer = column;
+    while (true) {
+        if (not(previousGameString == gameString)) {
+            weakAnswer = 0;
+            auto T1 = std::chrono::high_resolution_clock::now();
+            for (int i = 1; i <= 24; i++) {
+                int column = 1 + std::rand()/((RAND_MAX + 1u)/7);
+                P.play(gameString);
+                if (P.canPlay(column)) {
+                    weakAnswer = column;
+                    break;
+                }
             }
+            if (weakAnswer == 0) {
+                for (int i = 1; i <= 7; i++) {
+                    int column = i;
+                    P.play(gameString);
+                    if (P.canPlay(column)) {
+                        weakAnswer = column;
+                        break;
+                    }
+                }
+                if (weakAnswer == 0) {
+                    throw;
+                }
+            }
+            previousGameString = gameString;
+            auto T2 = std::chrono::high_resolution_clock::now();
+            std::cout << "TIME: " << std::chrono::duration_cast<std::chrono::nanoseconds>(T2 - T1).count() << std::endl;
         }
-        // pthread_mutex_unlock(&moveLock);
-        //}
+
     }
 
 }
@@ -234,6 +259,7 @@ void print_scheduler(void) {
 
 
 int main(int argc, char *argv[]) {
+    std::cout << "Welcome to Connect 4" << std::endl;
     cap = cv::VideoCapture(0);
     cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
@@ -297,6 +323,7 @@ int main(int argc, char *argv[]) {
     while (!thread1SetupDone) {
 
     }
+    std::cout << "Thread 1 Setup Done" << std::endl;
     //////
     //////
     i = 1;
@@ -322,9 +349,8 @@ int main(int argc, char *argv[]) {
                    thread2,              // thread function entry point
                    (void *) &(threadParams[i]) // parameters to pass in
     );
-    while (!thread2SetupDone) {
 
-    }
+
     //////
     //////
     i = 2;
@@ -350,9 +376,12 @@ int main(int argc, char *argv[]) {
                    thread3,              // thread function entry point
                    (void *) &(threadParams[i]) // parameters to pass in
     );
+
     while (!thread3SetupDone) {
 
     }
+    std::cout << "Thread 3 Setup Done" << std::endl;
+
     //////
     //////
 
@@ -379,12 +408,15 @@ int main(int argc, char *argv[]) {
                    thread4,              // thread function entry point
                    (void *) &(threadParams[i]) // parameters to pass in
     );
+    //////
+    //////
+
     while (!thread4SetupDone) {
 
     }
-    //////
-    //////
+    std::cout << "Thread 4 Setup Done\nAll Threads Running\n" << std::endl;
 
+    std::cout << "\033[1;31mWELCOME TO CONNECT 4!\033[0m\n" << std::endl;
 
     for (i = 0; i < NUM_THREADS; i++)
         pthread_join(threads[i], NULL);

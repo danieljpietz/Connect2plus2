@@ -46,12 +46,12 @@ std::array<std::array<char, 7>, 6> getBoardArray(std::array<std::array<Point, 7>
     for (int i = 0; i < 6; ++i) {
         for (int j = 0; j < 7; ++j) {
             auto center = board.at(i).at(j);
-            auto radius = 10;
+            auto radius = avgCircleRadius;
+
             Mat mask = Mat::zeros(src.rows, src.cols, CV_8UC1);
             circle(mask, center, radius, Scalar(255, 255, 255), FILLED, 8, 0);
             Scalar mm = mean(src, mask);
-            Scalar color;
-            if (mm[0] < 100 and mm[1] < 100 and mm[2] < 100) {
+            if (mm[0] < 50 and mm[1] < 50 and mm[2] < 50) {
                 currentBoard[i][j] = 'O';
             } else {
                 currentBoard[i][j] = 'X';
@@ -106,10 +106,8 @@ void printBoard(std::array<std::array<char, 7>, 6> board) {
     }
 }
 
-#define moveWaitThreshold 10
-
 cv::Mat lastAvg;
-#define bufferSize 1
+#define bufferSize 10
 bool firstIter = true;
 int bufferIndex = 0;
 
@@ -119,11 +117,13 @@ std::array<std::array<char, 7>, 6> getBoard(cv::VideoCapture cap) {
     cv::Mat src;
     cap >> src;
     if (firstIter) {
-        namedWindow("Display window", WINDOW_AUTOSIZE);
+
         for (int i = 0; i < bufferSize; ++i) {
             buffer.push_back(src);
         }
-        firstIter = false;
+
+    firstIter = false;
+
     } else {
         buffer[bufferIndex++ % bufferSize] = src;
     }
@@ -186,9 +186,8 @@ std::array<std::array<char, 7>, 6> getBoard(cv::VideoCapture cap) {
         board.at(boardY).at(boardX) = center;
     }
 
-    imshow("Display Window", src);
+
 
     std::array<std::array<char, 7>, 6> currentBoard = getBoardArray(board, src);
-
     return currentBoard;
 }
