@@ -91,7 +91,7 @@ void *thread2(void *args) {
                     auto tMove = std::chrono::high_resolution_clock::now();
                     auto tDelta = std::chrono::duration_cast<std::chrono::milliseconds>(tMove - tLastMove).count();
                     std::cout << tDelta << std::endl;
-                    if (tDelta > 1000 * moveWaitThreshold or true) {
+                    if (tDelta > 1000 * moveWaitThreshold) {
                         std::cout << "Move Made! " << moveLoc << std::endl;
                         gameString = gameString + std::to_string(moveLoc);
                         currentBoard = capturedBoard;
