@@ -14,6 +14,10 @@ using namespace std;
 
 std::vector<Mat3b> buffer;
 
+/** 
+Returns the average of a vector of images. 
+Used for noise reduction when determining the state of the board.
+**/
 
 Mat3b getMean(const vector<Mat3b> &images) {
     if (images.empty()) return Mat3b();
@@ -41,6 +45,11 @@ Mat3b getMean(const vector<Mat3b> &images) {
 
 double avgCircleRadius = 10;
 
+/**
+Determines the state of the board given a picture and hole pixel locations.
+A hole is marked as occupied if any pixel component is greater than 50.
+**/
+
 std::array<std::array<char, 7>, 6> getBoardArray(std::array<std::array<Point, 7>, 6> board, Mat src) {
     std::array<std::array<char, 7>, 6> currentBoard;
     for (int i = 0; i < 6; ++i) {
@@ -62,6 +71,10 @@ std::array<std::array<char, 7>, 6> getBoardArray(std::array<std::array<Point, 7>
     return currentBoard;
 }
 
+/**
+Checks two board arrays to see if they are equal
+**/
+
 bool isBoardEqual(std::array<std::array<char, 7>, 6> board1, std::array<std::array<char, 7>, 6> board2) {
     for (int i = 0; i < 6; ++i) {
         for (int j = 0; j < 7; ++j) {
@@ -72,6 +85,10 @@ bool isBoardEqual(std::array<std::array<char, 7>, 6> board1, std::array<std::arr
     }
     return true;
 }
+
+/**
+Checks a board buffer to see if all boards are equal
+**/
 
 bool isBufferEqual(ATLAS::CircularBuffer<boardBufferSize, std::array<std::array<char, 7>, 6>> buffer) {
     for (int i = 0; i < 6; ++i) {
@@ -86,6 +103,10 @@ bool isBufferEqual(ATLAS::CircularBuffer<boardBufferSize, std::array<std::array<
     return true;
 }
 
+/**
+Compares two boards to see where a move has been made. Only checks for one move at at time
+**/
+
 int getMoveLocation(std::array<std::array<char, 7>, 6> board1, std::array<std::array<char, 7>, 6> board2) {
     for (int i = 0; i < 6; ++i) {
         for (int j = 6; j >= 0; --j) {
@@ -96,6 +117,10 @@ int getMoveLocation(std::array<std::array<char, 7>, 6> board1, std::array<std::a
     }
     return 0;
 }
+
+/**
+Prints the board with 'X' denoting occupied holes and 'O' denoting empty holes.
+**/
 
 void printBoard(std::array<std::array<char, 7>, 6> board) {
     for (int i = 0; i < 6; ++i) {
@@ -111,7 +136,15 @@ cv::Mat lastAvg;
 bool firstIter = true;
 int bufferIndex = 0;
 
+/**
+Entry point for getting the state of the board from a picture. Alogrithm is as follows.
 
+1. Detect all circles around 30 pixels in diameter
+2. Use the top left and bottom right circles as respective hole locations on board
+3. Assume even placement of holes, and snap all other circles to fit 7 holes horizontally and 6 vertically
+4. Using the average diameter of circles found as a mask, find the average color within each hole to check if it is occupied.
+5. Return an array containing occupied holes.
+**/
 
 std::array<std::array<char, 7>, 6> getBoard(cv::VideoCapture cap) {
     cv::Mat src;
@@ -185,9 +218,6 @@ std::array<std::array<char, 7>, 6> getBoard(cv::VideoCapture cap) {
         }
         board.at(boardY).at(boardX) = center;
     }
-
-
-
     std::array<std::array<char, 7>, 6> currentBoard = getBoardArray(board, src);
     return currentBoard;
 }
