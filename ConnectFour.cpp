@@ -71,6 +71,12 @@ int weakAnswer = 0;
 
 int tick = 0;
 
+/**
+This is the image recognition thread. It constatnly looks at the camera feed
+to determine the state of the board. This board is then returned a 2 dimensional 7x6 array
+of characters with an 'X' denoting positions with a piece and an 'O' denoting empty positions.
+**/
+
 [[noreturn]] void *thread1(void *args) {
     std::cout << "Image thread running" << std::endl;
 
@@ -93,6 +99,13 @@ int tick = 0;
 }
 
 int moveCount = 0;
+
+/**
+This is the move detection thread. It constantly looks at the capturedBoard object
+and boardBuffer to determine if a move has been played. If a change is detected, 
+the change is added to the buffer. When the buffer is in agreement on  the change,
+it reports that a move has been made.
+*//
 
 [[noreturn]] void *thread2(void *args) {
     std::cout << "Move thread running" << std::endl;
@@ -146,6 +159,12 @@ int moveCount = 0;
     }
 }
 
+/**
+Strong solver thread. This will return the best possible move the player can make, using number of remaining moves
+needed to win as a metric. This takes several several seconds to solve early in the game, so the weak solution is given
+if it takes more than half a second to respond.
+**/
+
 [[noreturn]] void *thread3(void *args) {
     std::cout << "Strong solver thread running" << std::endl;
 
@@ -184,6 +203,12 @@ int moveCount = 0;
     }
 
 }
+
+/**
+Weak solver thread. This solution executes extremely quickly but only guarenteess 
+that the opponent will not win on the next move. It is used as a reccomendation if the 
+strong solver takes more than half a second to return a result.
+**/
 
 [[noreturn]] void *thread4(void *args) {
     std::cout << "Weak solver thread running" << std::endl;
@@ -257,6 +282,9 @@ void print_scheduler(void) {
 
 }
 
+/**
+This function initializes all other threads, done in a SCHED_FIFO scheduling system
+**/
 
 int main(int argc, char *argv[]) {
     std::cout << "Welcome to Connect 4" << std::endl;
