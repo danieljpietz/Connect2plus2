@@ -8,7 +8,7 @@
 #include <opencv2/opencv.hpp>
 #include "CircularBuffer.h"
 
-#define boardBufferSize 10
+#define boardBufferSize 5
 
 bool isBufferEqual(ATLAS::CircularBuffer<boardBufferSize, std::array<std::array<char, 7>, 6>> buffer);
 
@@ -18,6 +18,6 @@ int getMoveLocation(std::array<std::array<char, 7>, 6> board1, std::array<std::a
 
 void printBoard(std::array<std::array<char, 7>, 6> board);
 
-std::array<std::array<char, 7>, 6> getBoard(cv::VideoCapture cap);
+std::array<std::array<char, 7>, 6> getBoard(cv::Mat src);
 
 #endif //REALTIMEPROJECT_GETBOARD_H

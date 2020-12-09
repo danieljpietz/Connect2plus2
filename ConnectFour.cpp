@@ -16,7 +16,7 @@
 
 
 cv::VideoCapture cap;
-
+cv::Mat latestImage;
 #define NUM_THREADS (4)
 #define NUM_CPUS (4)
 
@@ -32,7 +32,7 @@ unsigned int reqIterations = 10000000;
 volatile unsigned int fib = 0, fib0 = 0, fib1 = 1;
 
 auto tLastMove = std::chrono::high_resolution_clock::now();
-
+int lastMoveCol = 0;
 typedef struct {
     int threadIdx;
 } threadParams_t;
@@ -66,21 +66,21 @@ bool thread4SetupDone = false;
 
 std::string gameString = "";
 
-int strongAnswer = 0;
-int weakAnswer = 0;
+volatile int strongAnswer = 0;
+volatile int weakAnswer = 0;
 
 int tick = 0;
 
 /**
-This is the image recognition thread. It constatnly looks at the camera feed
-to determine the state of the board. This board is then returned a 2 dimensional 7x6 array
+This is the image recognition thread. It constantly looks at the camera feed
+to determine the state of the board. This board is then returned as 2 dimensional 7x6 array
 of characters with an 'X' denoting positions with a piece and an 'O' denoting empty positions.
 **/
 
 [[noreturn]] void *thread1(void *args) {
     std::cout << "Image thread running" << std::endl;
-
-    capturedBoard = getBoard(cap);
+    cap >> latestImage;
+    capturedBoard = getBoard(latestImage);
     currentBoard = capturedBoard;
     for (int i = 0; i < boardBufferSize; ++i) {
         boardBuffer.insert(capturedBoard);
@@ -88,10 +88,9 @@ of characters with an 'X' denoting positions with a piece and an 'O' denoting em
     thread1SetupDone = true;
 
     while (true) {
-
-
         if (pthread_mutex_trylock(&boardLock) == 0) {
-            capturedBoard = getBoard(cap);
+            cap >> latestImage;
+            capturedBoard = getBoard(latestImage);
             pthread_mutex_unlock(&boardLock);
         }
 
@@ -105,7 +104,7 @@ This is the move detection thread. It constantly looks at the capturedBoard obje
 and boardBuffer to determine if a move has been played. If a change is detected, 
 the change is added to the buffer. When the buffer is in agreement on  the change,
 it reports that a move has been made.
-*//
+**/
 
 [[noreturn]] void *thread2(void *args) {
     std::cout << "Move thread running" << std::endl;
@@ -126,10 +125,10 @@ it reports that a move has been made.
                         std::cout << "Move Made! " << moveLoc << std::endl;
                         strongAnswer = 0;
                         weakAnswer = 0;
+                        lastMoveCol = moveLoc;
                         gameString = gameString + std::to_string(moveLoc);
-                        std::cout << "STR " << gameString << std::endl;
                         while (strongAnswer == 0 and std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::high_resolution_clock::now() - tMove).count() < 500) {
+                                std::chrono::high_resolution_clock::now() - tMove).count() < 250) {
                         }
                         if (strongAnswer != 0) {
                             std::cout << "Next move Strong: " << std::to_string(strongAnswer) << std::endl;
@@ -139,15 +138,7 @@ it reports that a move has been made.
                         }
                         currentBoard = capturedBoard;
                         tLastMove = tMove;
-                        std::cout << "CURRENT\n";
-                        printBoard(currentBoard);
-                        std::cout << "Captured\n";
-                        printBoard(capturedBoard);
                     }
-                    //std::cout << "CURRENT\n";
-                    //printBoard(currentBoard);
-                    //std::cout << "Captured\n";
-                    //printBoard(capturedBoard);
                     auto T2 = std::chrono::high_resolution_clock::now();
                     //std::cout << "TIME: " << std::chrono::duration_cast<std::chrono::nanoseconds>(T2 - T1).count() << std::endl;
 
@@ -193,8 +184,8 @@ if it takes more than half a second to respond.
                     strongAnswer = column;
                     //std::cout << "Next Move (" << column << "): " << copyGameString << " score: " << score
                               //<< " nodes iterated: " << solver.getNodeCount();
+                    std::cout << "Strong Answer: " << strongAnswer<< std::endl;
                 }
-                std::cout << std::endl;
             }
             previousGameString = gameString;
             //pthread_mutex_unlock(&moveLock);
@@ -220,7 +211,6 @@ strong solver takes more than half a second to return a result.
 
     while (true) {
         if (not(previousGameString == gameString)) {
-            weakAnswer = 0;
             auto T1 = std::chrono::high_resolution_clock::now();
             for (int i = 1; i <= 24; i++) {
                 int column = 1 + std::rand()/((RAND_MAX + 1u)/7);
@@ -244,8 +234,6 @@ strong solver takes more than half a second to return a result.
                 }
             }
             previousGameString = gameString;
-            auto T2 = std::chrono::high_resolution_clock::now();
-            std::cout << "TIME: " << std::chrono::duration_cast<std::chrono::nanoseconds>(T2 - T1).count() << std::endl;
         }
 
     }
@@ -348,8 +336,9 @@ int main(int argc, char *argv[]) {
                    thread1,              // thread function entry point
                    (void *) &(threadParams[i]) // parameters to pass in
     );
-    while (!thread1SetupDone) {
 
+    while (!thread1SetupDone) {
+        std::cout << "Thread 1 spin";
     }
     std::cout << "Thread 1 Setup Done" << std::endl;
     //////
@@ -405,9 +394,9 @@ int main(int argc, char *argv[]) {
                    (void *) &(threadParams[i]) // parameters to pass in
     );
 
-    while (!thread3SetupDone) {
-
-    }
+    //while (!thread3SetupDone) {
+       // std::cout << "thread 3 spion";
+    //}
     std::cout << "Thread 3 Setup Done" << std::endl;
 
     //////
@@ -439,12 +428,60 @@ int main(int argc, char *argv[]) {
     //////
     //////
 
-    while (!thread4SetupDone) {
-
-    }
+    //while (!thread4SetupDone) {
+        //std::cout << "Thread 4 spin" << std::endl;
+    //}
     std::cout << "Thread 4 Setup Done\nAll Threads Running\n" << std::endl;
 
     std::cout << "\033[1;31mWELCOME TO CONNECT 4!\033[0m\n" << std::endl;
+    auto startTime = std::chrono::high_resolution_clock::now();
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    cv::Mat dispImage = latestImage;
+    while (true) {
+        if (latestImage.empty())
+            continue;
+        latestImage.copyTo(dispImage);
+        currentTime = std::chrono::high_resolution_clock::now();
+
+        std::string seconds = std::to_string(std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count());
+        std::string mili = std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() % 1000);
+        std::string displayString = seconds + ":" + mili;
+        cv::putText(dispImage, //target image
+                    displayString, //text
+                    cv::Point(10, dispImage.rows / 8), //top-left position
+                    cv::FONT_HERSHEY_DUPLEX,
+                    1.0,
+                    CV_RGB(118, 185, 0), //font color
+                    1);
+
+        if (std::chrono::duration_cast<std::chrono::seconds>(currentTime - tLastMove).count() < 2 and
+        std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count() > 2) {
+            cv::putText(dispImage, //target image
+                        "Move Detected at " + std::to_string(lastMoveCol), //text
+                        cv::Point(dispImage.cols / 2, dispImage.rows / 8), //top-left position
+                        cv::FONT_HERSHEY_DUPLEX,
+                        1.0,
+                        CV_RGB(255, 0, 0), //font color
+                        1);
+
+            cv::putText(dispImage, //target image
+                        "Recommended move: " +
+                        std::to_string(strongAnswer == 0 ? weakAnswer : strongAnswer), //text
+                        cv::Point(dispImage.cols / 4, 1.5*dispImage.rows / 8), //top-left position
+                        cv::FONT_HERSHEY_DUPLEX,
+                        1.0,
+                        CV_RGB(255, 0, 0), //font color
+                        1);
+
+
+        }
+
+        imshow( "Frame", dispImage );
+        char c=(char)cv::waitKey(25);
+        if(c==27)
+            break;
+
+    }
 
     for (i = 0; i < NUM_THREADS; i++)
         pthread_join(threads[i], NULL);
