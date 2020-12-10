@@ -1,6 +1,21 @@
-//
-// Created by danieljpietz on 12/5/20.
-//
+/*
+ *  FILE:           GetBoard.cpp
+ *  AUTHOR:         Daniel Pietz (/danieljpietz)
+ *  CONTRIBUTORS:   Adam Walker (/the-adam-walker)  --  Debugging and supplemental implementation functions for intended execution of program
+ *                  Andrea Gray (/andreakatie)      --  Formatting
+ *					Emily Ferrier (/emferrier14)	 --  Formatting
+ *  DESCRIPTION:    Returns the average vector of images processed through OpenCV and constantly refreshes to return the current status of the
+					game board. A hole is marked where any component pixel is greater than 50 in order to depict a piece's presence. Multiple 
+					board arrays are compared to ensure accuracy of depiction.
+ *  VERSION:        2.4.1                           --  12-08-2020
+ *  NOTES:          Created in partial fulfillment of course requirements for CEC450 (Real-Time Systems) ERAU-PRC
+ *                  Final Project                   --  Exercise 6
+ *                  (C) Daniel J. Pietz. All rights reserved.
+ */
+
+
+using namespace cv;
+using namespace std;
 
 #include "GetBoard.h"
 #include <opencv2/opencv.hpp>
@@ -9,16 +24,21 @@
 #include <opencv2/imgproc.hpp>
 #include <vector>
 
-using namespace cv;
-using namespace std;
+#define bufferSize 15
+
+int iter = 0;
+int bufferIndex = 0;
+
+double avgCircleRadius = 10;
+
+bool firstIter = true; 
 
 std::vector<Mat3b> buffer;
 
-/** 
-Returns the average of a vector of images. 
-Used for noise reduction when determining the state of the board.
-**/
-
+/*
+ *	Returns the average of a vector of images. 
+ *	Used for noise reduction when determining the state of the board.
+ */
 Mat3b getMean(const vector<Mat3b> &images) {
     if (images.empty()) return Mat3b();
 
@@ -26,9 +46,10 @@ Mat3b getMean(const vector<Mat3b> &images) {
     Mat m(images[0].rows, images[0].cols, CV_64FC3);
     m.setTo(Scalar(0, 0, 0, 0));
 
-    // Use a temp image to hold the conversion of each input image to CV_64FC3
-    // This will be allocated just the first time, since all your images have
-    // the same size.
+    /*	Use a temp image to hold the conversion of each input image to CV_64FC3
+     *	This will be allocated just the first time, since all your images have
+     *	the same size.
+	 */
     Mat temp;
     for (int i = 0; i < images.size(); ++i) {
         // Convert the input images to CV_64FC3 ...
@@ -43,15 +64,14 @@ Mat3b getMean(const vector<Mat3b> &images) {
     return m;
 }
 
-double avgCircleRadius = 10;
 
-/**
-Determines the state of the board given a picture and hole pixel locations.
-A hole is marked as occupied if any pixel component is greater than 50.
-**/
+/*
+ *	Determines the state of the board given a picture and hole pixel locations.
+ *	A hole is marked as occupied if any pixel component is greater than 50.
+ */
 
-int iter = 0;
 
+//Retrieves and returns the current board status
 std::array<std::array<char, 7>, 6> getBoardArray(std::array<std::array<Point, 7>, 6> board, Mat src) {
     std::array<std::array<char, 7>, 6> currentBoard;
     for (int i = 0; i < 6; ++i) {
@@ -74,10 +94,10 @@ std::array<std::array<char, 7>, 6> getBoardArray(std::array<std::array<Point, 7>
     return currentBoard;
 }
 
-/**
-Checks two board arrays to see if they are equal
-**/
 
+/*
+ *	Checks two board arrays to see if they are equal
+ */
 bool isBoardEqual(std::array<std::array<char, 7>, 6> board1, std::array<std::array<char, 7>, 6> board2) {
     for (int i = 0; i < 6; ++i) {
         for (int j = 0; j < 7; ++j) {
@@ -89,10 +109,9 @@ bool isBoardEqual(std::array<std::array<char, 7>, 6> board1, std::array<std::arr
     return true;
 }
 
-/**
-Checks a board buffer to see if all boards are equal
-**/
-
+/*
+ *	Checks a board buffer to see if all boards are equal
+ */
 bool isBufferEqual(ATLAS::CircularBuffer<boardBufferSize, std::array<std::array<char, 7>, 6>> buffer) {
     for (int i = 0; i < 6; ++i) {
         for (int j = 0; j < 7; ++j) {
@@ -106,10 +125,10 @@ bool isBufferEqual(ATLAS::CircularBuffer<boardBufferSize, std::array<std::array<
     return true;
 }
 
-/**
-Compares two boards to see where a move has been made. Only checks for one move at at time
-**/
-
+/*
+ *	Compares two boards to see where a move has been made.
+ *	Only checks for one move at at time.
+ */
 int getMoveLocation(std::array<std::array<char, 7>, 6> board1, std::array<std::array<char, 7>, 6> board2) {
     for (int i = 0; i < 6; ++i) {
         for (int j = 6; j >= 0; --j) {
@@ -121,10 +140,8 @@ int getMoveLocation(std::array<std::array<char, 7>, 6> board1, std::array<std::a
     return 0;
 }
 
-/**
-Prints the board with 'X' denoting occupied holes and 'O' denoting empty holes.
-**/
 
+//Prints the board with 'X' denoting occupied holes and 'O' denoting empty holes.
 void printBoard(std::array<std::array<char, 7>, 6> board) {
     for (int i = 0; i < 6; ++i) {
         for (int j = 0; j < 7; ++j) {
@@ -135,22 +152,18 @@ void printBoard(std::array<std::array<char, 7>, 6> board) {
 }
 
 cv::Mat lastAvg;
-#define bufferSize 15
-bool firstIter = true;
-int bufferIndex = 0;
 
-/**
-Entry point for getting the state of the board from a picture. Alogrithm is as follows.
+/*
+ *	Entry point for getting the state of the board from a picture. Alogrithm is as follows:
+ *	1. Detect all circles around 30 pixels in diameter
+ *	2. Use the top left and bottom right circles as respective hole locations on board
+ *	3. Assume even placement of holes, and snap all other circles to fit 7 holes horizontally and 6 vertically
+ *	4. Using the average diameter of circles found as a mask, find the average color within each hole to check if it is occupied.
+ *	5. Return an array containing occupied holes.
+ */
 
-1. Detect all circles around 30 pixels in diameter
-2. Use the top left and bottom right circles as respective hole locations on board
-3. Assume even placement of holes, and snap all other circles to fit 7 holes horizontally and 6 vertically
-4. Using the average diameter of circles found as a mask, find the average color within each hole to check if it is occupied.
-5. Return an array containing occupied holes.
-**/
-
+// Declares board representation as an array matrix of characters with 7 columns and 6 rows
 std::array<std::array<Point, 7>, 6> currentBoardArr;
-
 std::array<std::array<char, 7>, 6> getBoard(cv::Mat src) {
 
     std::array<std::array<Point, 7>, 6> board;
